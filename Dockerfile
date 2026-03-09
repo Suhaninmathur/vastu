@@ -16,16 +16,19 @@ WORKDIR /app
 # Download Crow single-header
 RUN curl -fL \
     https://github.com/CrowCpp/Crow/releases/download/v1.0+5/crow_all.h \
-    -o crow_all.h
+    -o crow_all.h && echo "Crow downloaded OK"
 
 COPY main.cpp .
 
-# CROW_USE_BOOST=0 → use standalone Asio (libasio-dev), no boost linking needed
+# ASIO_STANDALONE = use standalone asio, not boost
 RUN g++ -std=c++17 -O2 \
     -DCROW_USE_BOOST=0 \
+    -DASIO_STANDALONE \
+    -I/usr/include \
     -o vastu_api main.cpp \
-    -lpthread -lz \
-    && strip vastu_api
+    -lpthread -lssl -lcrypto -lz \
+    && strip vastu_api \
+    && echo "Build OK"
 
 # ─── Stage 2: Runtime ─────────────────────────────────────────────────────────
 FROM ubuntu:22.04
