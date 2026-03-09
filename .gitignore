@@ -2,5 +2,3 @@ crow_all.h
 vastu_api
 *.o
 *.out
-build/
-.DS_Store

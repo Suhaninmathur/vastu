@@ -1,3 +1,5 @@
+#define CROW_USE_BOOST 0
+#define ASIO_STANDALONE
 #include "crow_all.h"
 #include <string>
 #include <vector>
@@ -5,243 +7,160 @@
 #include <ctime>
 using namespace std;
 
-// ════════════════════════════════════════════
-//   VASTU EXPERT SYSTEM — Crow REST API
-//   Routes:
-//     GET  /              health check
-//     POST /api/analyze   analyze one house
-//     POST /api/compare   compare two houses
-//     GET  /api/tip       random Vastu tip
-// ════════════════════════════════════════════
-
-// ─── Vastu Logic ─────────────────────────────
-
 struct Result {
     string label;
     int    score;
-    string suggestion; // empty = no dosha
+    string suggestion;
 };
 
-Result analyzePlot(const string& shape) {
-    if (shape == "Square")
-        return {"Perfect Vastu Plot — Square gives balanced energy on all 4 sides.", 20, ""};
-    if (shape == "Rectangle")
-        return {"Good Plot — Rectangle acceptable if length:width ratio < 1:2.", 15, ""};
-    if (shape == "Triangle")
-        return {"Dosha — Triangular plot causes Agni dosha (disputes/fire).", 3,
-                "Plant trees on South & West boundary. Use Vastu pyramids at corners."};
-    return {"Dosha — Irregular plot disturbs Pancha Bhuta balance.", 5,
-            "Use Vastu pyramids on all corners to neutralise irregular energy."};
+Result analyzePlot(const string& s) {
+    if (s == "Square")    return {"Perfect Vastu Plot - Square gives balanced energy.", 20, ""};
+    if (s == "Rectangle") return {"Good Plot - Rectangle acceptable if ratio < 1:2.", 15, ""};
+    if (s == "Triangle")  return {"Dosha - Triangular plot causes Agni dosha.", 3, "Plant trees on South & West. Use Vastu pyramids at corners."};
+    return {"Dosha - Irregular plot disturbs Pancha Bhuta balance.", 5, "Use Vastu pyramids on all corners."};
 }
 
-Result analyzeEntrance(const string& dir) {
-    if (dir == "NorthEast")
-        return {"Excellent — NorthEast (Ishaan) is the most auspicious entrance.", 20, ""};
-    if (dir == "North")
-        return {"Very Good — North brings wealth (Kubera direction).", 18, ""};
-    if (dir == "East")
-        return {"Very Good — East brings health and positive solar energy.", 18, ""};
-    if (dir == "West")
-        return {"Average — West entrance is neutral.", 10, ""};
-    if (dir == "South")
-        return {"Dosha — South entrance invites negative energy.", 3,
-                "Hang Vastu swastika on South door. Place lead strip below threshold."};
-    return {"Moderate — Acceptable if main road faces this direction.", 8, ""};
+Result analyzeEntrance(const string& d) {
+    if (d == "NorthEast") return {"Excellent - NorthEast (Ishaan) is most auspicious.", 20, ""};
+    if (d == "North")     return {"Very Good - North brings wealth (Kubera direction).", 18, ""};
+    if (d == "East")      return {"Very Good - East brings health and solar energy.", 18, ""};
+    if (d == "West")      return {"Average - West entrance is neutral.", 10, ""};
+    if (d == "South")     return {"Dosha - South entrance invites negative energy.", 3, "Hang Vastu swastika on South door."};
+    return {"Moderate - Acceptable if main road faces this direction.", 8, ""};
 }
 
-Result analyzeKitchen(const string& dir) {
-    if (dir == "SouthEast")
-        return {"Perfect — SouthEast is the Agni (fire) corner for kitchen.", 20, ""};
-    if (dir == "NorthWest")
-        return {"Acceptable — NorthWest kitchen works if stove faces East.", 12, ""};
-    if (dir == "NorthEast")
-        return {"Dosha — Never place kitchen in NorthEast (destroys prosperity).", 2,
-                "Shift cooking to SouthEast. Place red pyramid in kitchen."};
-    if (dir == "SouthWest")
-        return {"Dosha — SouthWest kitchen causes health issues.", 3,
-                "Use orange/red walls. Avoid water source near stove."};
-    return {"Moderate — Ensure stove faces East while cooking.", 8, ""};
+Result analyzeKitchen(const string& d) {
+    if (d == "SouthEast") return {"Perfect - SouthEast is the Agni fire corner.", 20, ""};
+    if (d == "NorthWest") return {"Acceptable - NorthWest works if stove faces East.", 12, ""};
+    if (d == "NorthEast") return {"Dosha - Kitchen in NorthEast destroys prosperity.", 2, "Shift cooking to SouthEast."};
+    if (d == "SouthWest") return {"Dosha - SouthWest kitchen causes health issues.", 3, "Use orange/red walls."};
+    return {"Moderate - Ensure stove faces East while cooking.", 8, ""};
 }
 
-Result analyzeBedroom(const string& dir) {
-    if (dir == "SouthWest")
-        return {"Perfect — SouthWest gives stability and sound sleep.", 20, ""};
-    if (dir == "South")
-        return {"Good — South bedroom gives good rest. Head should point South.", 15, ""};
-    if (dir == "NorthWest")
-        return {"Acceptable — NorthWest is better for guest room.", 10, ""};
-    if (dir == "NorthEast")
-        return {"Dosha — NorthEast bedroom disturbs mental peace.", 3,
-                "Shift master bedroom. Place blue crystal in NorthEast corner."};
-    return {"Moderate — Ensure head points South or East while sleeping.", 8, ""};
+Result analyzeBedroom(const string& d) {
+    if (d == "SouthWest") return {"Perfect - SouthWest gives stability and sound sleep.", 20, ""};
+    if (d == "South")     return {"Good - South bedroom gives good rest.", 15, ""};
+    if (d == "NorthWest") return {"Acceptable - NorthWest better for guest room.", 10, ""};
+    if (d == "NorthEast") return {"Dosha - NorthEast bedroom disturbs mental peace.", 3, "Shift master bedroom."};
+    return {"Moderate - Ensure head points South or East while sleeping.", 8, ""};
 }
 
-Result analyzeTemple(const string& dir) {
-    if (dir == "NorthEast")
-        return {"Perfect — NorthEast (Ishaan) is the divine corner for worship.", 20, ""};
-    if (dir == "East")
-        return {"Good — East is auspicious for pooja facing the rising sun.", 15, ""};
-    if (dir == "North")
-        return {"Acceptable — North pooja room is fine if NorthEast is unavailable.", 12, ""};
-    if (dir == "South")
-        return {"Dosha — South temple disturbs prayer energy.", 3,
-                "Hang copper pyramid above temple. Face idol East."};
-    if (dir == "SouthWest")
-        return {"Dosha — SouthWest temple is strongly prohibited.", 1,
-                "Relocate temple to NorthEast. Place copper idol facing East."};
-    return {"Moderate — Place idol facing East inside the room.", 8, ""};
+Result analyzeTemple(const string& d) {
+    if (d == "NorthEast") return {"Perfect - NorthEast (Ishaan) is the divine corner.", 20, ""};
+    if (d == "East")      return {"Good - East is auspicious for pooja.", 15, ""};
+    if (d == "North")     return {"Acceptable - North is fine if NorthEast unavailable.", 12, ""};
+    if (d == "South")     return {"Dosha - South temple disturbs prayer energy.", 3, "Face idol East."};
+    if (d == "SouthWest") return {"Dosha - SouthWest temple is strongly prohibited.", 1, "Relocate to NorthEast."};
+    return {"Moderate - Place idol facing East inside the room.", 8, ""};
 }
 
 string getVerdict(int score) {
-    if (score >= 85) return "EXCELLENT — Highly Vastu-compliant home. Great prosperity ahead!";
-    if (score >= 70) return "GOOD — Minor corrections needed for best results.";
-    if (score >= 50) return "AVERAGE — Several doshas present. Apply remedies soon.";
-    return "POOR — Major Vastu doshas. Structural changes recommended.";
+    if (score >= 85) return "EXCELLENT - Highly Vastu-compliant home!";
+    if (score >= 70) return "GOOD - Minor corrections needed.";
+    if (score >= 50) return "AVERAGE - Several doshas present. Apply remedies.";
+    return "POOR - Major Vastu doshas. Corrections recommended.";
 }
 
 const vector<string> TIPS = {
-    "Keep the NorthEast corner clean and clutter-free — it is the sacred Ishaan zone.",
-    "Never place a mirror directly facing the main entrance — it reflects positive energy out.",
-    "Tulsi plant in East or NorthEast brings health and wards off negative energy.",
-    "Keep the centre of your home (Brahmasthana) open — avoid toilets or pillars here.",
-    "Water elements like aquarium belong in the NorthEast or North direction.",
-    "Sleeping with head pointing South gives sound sleep; head towards North is prohibited.",
-    "Use yellow or cream colors in the NorthEast zone to amplify divine energy.",
-    "Salt in a bowl placed in corners absorbs negative energy — replace every Saturday.",
+    "Keep the NorthEast corner clean - it is the sacred Ishaan zone.",
+    "Never place a mirror directly facing the main entrance.",
+    "Tulsi plant in East or NorthEast brings health and positive energy.",
+    "Keep the centre (Brahmasthana) open - avoid toilets or pillars here.",
+    "Water elements like aquarium belong in NorthEast or North.",
+    "Sleeping with head pointing South gives sound sleep.",
+    "Use yellow or cream colors in the NorthEast zone.",
+    "Salt in a bowl in corners absorbs negative energy - replace every Saturday.",
 };
 
-// ─── Main ─────────────────────────────────────
+void addCORS(crow::response& res) {
+    res.add_header("Access-Control-Allow-Origin",  "*");
+    res.add_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.add_header("Access-Control-Allow-Headers", "Content-Type");
+}
 
 int main() {
     srand((unsigned)time(nullptr));
-
     crow::SimpleApp app;
 
-    // ── CORS middleware — adds headers to every response ──────────────────────
-    auto& cors = app.get_middleware<crow::CORSHandler>();
-    cors
-        .global()
-        .headers("Content-Type", "Authorization")
-        .methods("GET"_method, "POST"_method, "OPTIONS"_method)
-        .origin("*");   // tighten to your Render frontend URL in production
-
-    // ── GET / — health check ──────────────────────────────────────────────────
     CROW_ROUTE(app, "/")([](){
-        crow::json::wvalue res;
-        res["status"]  = "ok";
-        res["service"] = "Vastu Expert API";
-        res["version"] = "1.0";
-        return res;
+        crow::json::wvalue r;
+        r["status"]  = "ok";
+        r["service"] = "Vastu Expert API";
+        return r;
     });
 
-    // ── POST /api/analyze ─────────────────────────────────────────────────────
-    // Body: { "plotShape":"Square","entrance":"NorthEast","kitchen":"SouthEast",
-    //         "bedroom":"SouthWest","temple":"NorthEast" }
     CROW_ROUTE(app, "/api/analyze").methods("POST"_method)
-    ([](const crow::request& req){
+    ([](const crow::request& req, crow::response& res){
+        addCORS(res);
         auto body = crow::json::load(req.body);
-        if (!body) {
-            crow::response res(400);
-            res.write("{\"error\":\"Invalid JSON\"}");
-            return res;
+        if (!body) { res.code=400; res.write("{\"error\":\"Invalid JSON\"}"); res.end(); return; }
+
+        for (auto f : {"plotShape","entrance","kitchen","bedroom","temple"}) {
+            if (!body.has(f)) { res.code=400; res.write("{\"error\":\"Missing field\"}"); res.end(); return; }
         }
 
-        // Validate required fields
-        for (auto field : {"plotShape","entrance","kitchen","bedroom","temple"}) {
-            if (!body.has(field)) {
-                crow::response res(400);
-                res.write("{\"error\":\"Missing field: " + string(field) + "\"}");
-                return res;
-            }
-        }
-
-        string plotShape = body["plotShape"].s();
-        string entrance  = body["entrance"].s();
-        string kitchen   = body["kitchen"].s();
-        string bedroom   = body["bedroom"].s();
-        string temple    = body["temple"].s();
-
-        Result p = analyzePlot(plotShape);
-        Result e = analyzeEntrance(entrance);
-        Result k = analyzeKitchen(kitchen);
-        Result b = analyzeBedroom(bedroom);
-        Result t = analyzeTemple(temple);
-
+        auto p = analyzePlot    (body["plotShape"].s());
+        auto e = analyzeEntrance(body["entrance"].s());
+        auto k = analyzeKitchen (body["kitchen"].s());
+        auto b = analyzeBedroom (body["bedroom"].s());
+        auto t = analyzeTemple  (body["temple"].s());
         int total = p.score + e.score + k.score + b.score + t.score;
 
-        crow::json::wvalue res;
-        res["totalScore"] = total;
-        res["verdict"]    = getVerdict(total);
-
-        res["breakdown"]["plot"]["label"]      = p.label;
-        res["breakdown"]["plot"]["score"]      = p.score;
-        res["breakdown"]["plot"]["suggestion"] = p.suggestion;
-
-        res["breakdown"]["entrance"]["label"]      = e.label;
-        res["breakdown"]["entrance"]["score"]      = e.score;
-        res["breakdown"]["entrance"]["suggestion"] = e.suggestion;
-
-        res["breakdown"]["kitchen"]["label"]      = k.label;
-        res["breakdown"]["kitchen"]["score"]      = k.score;
-        res["breakdown"]["kitchen"]["suggestion"] = k.suggestion;
-
-        res["breakdown"]["bedroom"]["label"]      = b.label;
-        res["breakdown"]["bedroom"]["score"]      = b.score;
-        res["breakdown"]["bedroom"]["suggestion"] = b.suggestion;
-
-        res["breakdown"]["temple"]["label"]      = t.label;
-        res["breakdown"]["temple"]["score"]      = t.score;
-        res["breakdown"]["temple"]["suggestion"] = t.suggestion;
-
-        return crow::response(res);
+        crow::json::wvalue r;
+        r["totalScore"] = total;
+        r["verdict"]    = getVerdict(total);
+        r["breakdown"]["plot"]["label"]          = p.label;
+        r["breakdown"]["plot"]["score"]          = p.score;
+        r["breakdown"]["plot"]["suggestion"]     = p.suggestion;
+        r["breakdown"]["entrance"]["label"]      = e.label;
+        r["breakdown"]["entrance"]["score"]      = e.score;
+        r["breakdown"]["entrance"]["suggestion"] = e.suggestion;
+        r["breakdown"]["kitchen"]["label"]       = k.label;
+        r["breakdown"]["kitchen"]["score"]       = k.score;
+        r["breakdown"]["kitchen"]["suggestion"]  = k.suggestion;
+        r["breakdown"]["bedroom"]["label"]       = b.label;
+        r["breakdown"]["bedroom"]["score"]       = b.score;
+        r["breakdown"]["bedroom"]["suggestion"]  = b.suggestion;
+        r["breakdown"]["temple"]["label"]        = t.label;
+        r["breakdown"]["temple"]["score"]        = t.score;
+        r["breakdown"]["temple"]["suggestion"]   = t.suggestion;
+        res.write(r.dump()); res.end();
     });
 
-    // ── POST /api/compare ─────────────────────────────────────────────────────
-    // Body: { "house1":{...}, "house2":{...} }
     CROW_ROUTE(app, "/api/compare").methods("POST"_method)
-    ([](const crow::request& req){
+    ([](const crow::request& req, crow::response& res){
+        addCORS(res);
         auto body = crow::json::load(req.body);
         if (!body || !body.has("house1") || !body.has("house2")) {
-            crow::response res(400);
-            res.write("{\"error\":\"Provide house1 and house2 objects\"}");
-            return res;
+            res.code=400; res.write("{\"error\":\"Provide house1 and house2\"}"); res.end(); return;
         }
-
-        auto score = [](crow::json::rvalue h) -> int {
+        auto score = [](crow::json::rvalue h) {
             return analyzePlot    (h["plotShape"].s()).score
                  + analyzeEntrance(h["entrance"].s()).score
                  + analyzeKitchen (h["kitchen"].s()).score
                  + analyzeBedroom (h["bedroom"].s()).score
                  + analyzeTemple  (h["temple"].s()).score;
         };
-
         int s1 = score(body["house1"]);
         int s2 = score(body["house2"]);
-
-        string winner;
-        if      (s1 > s2) winner = "House 1 has better Vastu alignment.";
-        else if (s2 > s1) winner = "House 2 has better Vastu alignment.";
-        else              winner = "Both houses have equal Vastu score.";
-
-        crow::json::wvalue res;
-        res["house1Score"] = s1;
-        res["house2Score"] = s2;
-        res["winner"]      = winner;
-        return crow::response(res);
+        string winner = s1>s2 ? "House 1 has better Vastu alignment."
+                      : s2>s1 ? "House 2 has better Vastu alignment."
+                      : "Both houses have equal Vastu score.";
+        crow::json::wvalue r;
+        r["house1Score"] = s1;
+        r["house2Score"] = s2;
+        r["winner"]      = winner;
+        res.write(r.dump()); res.end();
     });
 
-    // ── GET /api/tip ──────────────────────────────────────────────────────────
     CROW_ROUTE(app, "/api/tip")([](){
-        crow::json::wvalue res;
-        res["tip"] = TIPS[rand() % TIPS.size()];
-        return res;
+        crow::json::wvalue r;
+        r["tip"] = TIPS[rand() % TIPS.size()];
+        return r;
     });
 
-    // Render sets PORT env var at runtime
     uint16_t port = 8080;
-    const char* env_port = getenv("PORT");
-    if (env_port) port = (uint16_t)atoi(env_port);
-
+    if (const char* p = getenv("PORT")) port = (uint16_t)atoi(p);
     app.port(port).multithreaded().run();
     return 0;
 }
